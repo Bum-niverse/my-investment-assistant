@@ -249,11 +249,14 @@ def build_report(
 
     news_lines = []
     for article in news.articles[:5]:
-        title = article.get("title") or "제목 없음"
-        publisher = article.get("publisher") or "출처 미상"
-        published_at = article.get("published_at") or "일시 미상"
-        news_lines.append(f"- {title} ({publisher}, {published_at})")
-    news_text = "\n".join(news_lines) if news_lines else "- 확인 실패"
+        title = str(article.get("title") or "").strip()
+        if not title:
+            continue
+        source = str(article.get("source") or article.get("publisher") or "").strip()
+        published_at = str(article.get("published_at") or "").strip()
+        meta = ", ".join(value for value in [source, published_at] if value)
+        news_lines.append(f"- {title} ({meta})" if meta else f"- {title}")
+    news_text = "\n".join(news_lines) if news_lines else "- 뉴스 확인 실패: 유효한 뉴스 제목을 파싱하지 못함"
 
     fundamentals_text = _format_fundamentals(fundamentals.data) if fundamentals.ok else "확인 실패"
     image_text = image_notes or "차트 이미지가 제공되지 않았거나 별도 이미지 메모가 없음"
