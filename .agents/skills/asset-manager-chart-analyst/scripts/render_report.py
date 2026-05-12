@@ -43,6 +43,7 @@ class ChartReport:
     level_analysis: str = "확인 실패"
     annotated_chart_path: str = "생성 실패"
     forecast_chart_path: str = "생성 실패"
+    report_card_path: str = "생성 실패"
     bullish_scenario: str = "확인 실패"
     neutral_scenario: str = "확인 실패"
     bearish_scenario: str = "확인 실패"
@@ -134,6 +135,7 @@ def render_report(report: ChartReport) -> str:
 
 - 분석 차트 이미지 경로: {report.annotated_chart_path}
 - 시나리오 차트 이미지 경로: {report.forecast_chart_path}
+- 리포트 카드 이미지 경로: {report.report_card_path}
 
 ## 7. 시나리오 해석
 

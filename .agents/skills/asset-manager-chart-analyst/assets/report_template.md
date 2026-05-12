@@ -71,6 +71,7 @@
 
 - 분석 차트 이미지 경로: {{ annotated_chart_path }}
 - 시나리오 차트 이미지 경로: {{ forecast_chart_path }}
+- 리포트 카드 이미지 경로: {{ report_card_path }}
 
 ## 7. 시나리오 해석
 

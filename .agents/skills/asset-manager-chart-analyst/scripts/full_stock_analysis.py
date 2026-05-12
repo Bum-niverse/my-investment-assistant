@@ -23,6 +23,48 @@ def _format_percent(value: Any) -> str:
         return str(value)
 
 
+def _parse_price(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).replace(",", "").replace("원", "").strip()
+    if not text or "확인 실패" in text:
+        return None
+    try:
+        return float(text.split()[0])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _format_signed_percent(value: float | None) -> str:
+    if value is None:
+        return "데이터 없음"
+    return f"{value:+.2f}%"
+
+
+def _calculate_card_metrics(current_price: str, entry_price: str, stop_loss: str, target_1: str) -> dict[str, str]:
+    entry = _parse_price(entry_price)
+    stop = _parse_price(stop_loss)
+    target = _parse_price(target_1)
+    current = _parse_price(current_price)
+    base = entry or current
+    if base is None:
+        return {"risk": "데이터 없음", "reward": "데이터 없음", "risk_reward": "데이터 없음"}
+
+    risk_pct = ((stop - base) / base * 100) if stop is not None else None
+    reward_pct = ((target - base) / base * 100) if target is not None else None
+    risk_abs = abs(risk_pct) if risk_pct is not None else None
+    reward_abs = abs(reward_pct) if reward_pct is not None else None
+    if risk_abs and reward_abs and risk_abs > 0:
+        risk_reward = f"1:{reward_abs / risk_abs:.2f}"
+    else:
+        risk_reward = "데이터 없음"
+    return {
+        "risk": _format_signed_percent(risk_pct),
+        "reward": _format_signed_percent(reward_pct),
+        "risk_reward": risk_reward,
+    }
+
+
 def _judge_rsi(value: float | None) -> str:
     if value is None:
         return "확인 실패"
@@ -67,6 +109,20 @@ def _judge_bollinger(latest_close: float | None, bands: dict[str, float]) -> str
     if latest_close >= middle:
         return "중심선 위, 추세 양호"
     return "중심선 아래, 추세 확인 필요"
+
+
+def _judge_ma_alignment(moving_averages: dict[str, float]) -> str:
+    ma5 = moving_averages.get("MA_5")
+    ma20 = moving_averages.get("MA_20")
+    ma60 = moving_averages.get("MA_60")
+    ma120 = moving_averages.get("MA_120")
+    if None in {ma5, ma20, ma60, ma120}:
+        return "확인 실패"
+    if ma5 >= ma20 >= ma60 >= ma120:
+        return "정배열"
+    if ma5 <= ma20 <= ma60 <= ma120:
+        return "역배열"
+    return "혼조"
 
 
 def _build_price_levels(ohlcv: dict[str, Any], indicators: dict[str, Any]) -> dict[str, str]:
@@ -184,6 +240,20 @@ def _generate_chart_images(
     return paths, failures
 
 
+def _generate_report_card_image(
+    card_data: dict[str, Any],
+    output_dir: str | None,
+) -> tuple[str, str | None]:
+    output_root = Path(output_dir or "outputs").resolve()
+    report_card_path = output_root / "report_card.png"
+    try:
+        from render_report_card import render_report_card
+
+        return render_report_card(card_data, report_card_path), None
+    except Exception as exc:
+        return "생성 실패", f"리포트 카드 이미지 생성 실패: {exc}"
+
+
 def build_report(
     ticker: str,
     stock_name: str | None,
@@ -197,7 +267,7 @@ def build_report(
         from fetch_news import fetch_news
         from technical_indicators import build_indicator_summary
     except Exception as exc:
-        return build_dependency_failure_report(ticker, stock_name, horizon, image_notes, exc)
+        return build_dependency_failure_report(ticker, stock_name, horizon, image_notes, output_dir, exc)
 
     market_result = fetch_ohlcv(ticker)
     ohlcv_summary = summarize_ohlcv(market_result)
@@ -259,6 +329,8 @@ def build_report(
     rsi_judgment = _judge_rsi(latest_rsi)
     macd_judgment = _judge_macd(macd)
     band_judgment = _judge_bollinger(latest_close, bands)
+    moving_averages = indicators.get("moving_averages", {})
+    ma_alignment = _judge_ma_alignment(moving_averages) if isinstance(moving_averages, dict) else "확인 실패"
 
     data_based_judgment = "데이터 부족"
     if market_result.ok:
@@ -294,7 +366,7 @@ def build_report(
         f"MACD: {macd_judgment}\n"
         f"전략: 지지 확인 후 분할 접근"
     )
-    chart_paths = {"analysis_chart": "생성 실패", "forecast_chart": "생성 실패"}
+    chart_paths = {"analysis_chart": "생성 실패", "forecast_chart": "생성 실패", "report_card": "생성 실패"}
     chart_failures: list[str] = []
     if market_result.ok:
         chart_paths, chart_failures = _generate_chart_images(
@@ -306,6 +378,35 @@ def build_report(
         )
     else:
         chart_failures.append("이미지 생성 실패 이유: OHLCV 데이터가 없어 차트 이미지를 생성할 수 없습니다")
+    report_card_data = {
+        **_calculate_card_metrics(price_levels["current_price"], price_levels["entry"], price_levels["stop_loss"], price_levels["target_1"]),
+        "stock_name": stock_label,
+        "ticker": ticker,
+        "data_as_of": data_date,
+        "recommendation": "WATCH",
+        "confidence": "60%",
+        "current_price": price_levels["current_price"],
+        "entry_price": price_levels["entry"],
+        "stop_loss": price_levels["stop_loss"],
+        "target_1": price_levels["target_1"],
+        "target_2": price_levels["target_2"],
+        "rsi": f"{_format_percent(latest_rsi)} / {rsi_judgment}" if latest_rsi is not None else "확인 실패",
+        "macd": macd_judgment,
+        "bollinger": band_judgment,
+        "ma_status": ma_alignment,
+        "summary": f"{stock_label}는 현재 `{data_based_judgment}`로 판단됩니다. 데이터가 부족하거나 일부 소스가 실패한 경우에는 보수적으로 접근해야 합니다.",
+        "trend_analysis": f"{data_based_judgment}. 이동평균선과 가격 위치를 함께 확인해 추세 유지 여부를 판단합니다.",
+        "pattern_analysis": image_text if image_notes else "이미지 기반 패턴은 제공된 차트 메모가 있을 때만 확정합니다. 현재는 지지/저항과 지표 중심으로 판단합니다.",
+        "indicator_analysis": f"RSI: {rsi_judgment}, MACD: {macd_judgment}, Bollinger: {band_judgment}, MA 배열: {ma_alignment}",
+        "new_entry_strategy": f"{price_levels['entry']} 전략을 우선하고 추격매수는 피합니다.",
+        "holder_strategy": "1차 목표가에서 일부 익절을 검토하고 손절 기준 이탈 시 스윙 관점 훼손으로 봅니다.",
+        "risk_management": "손절 기준, 변동성, 뉴스/실적 리스크를 확인하고 전체 자산 대비 비중을 제한합니다.",
+        "trade_strategy": f"신규 진입자는 {price_levels['entry']} 구간에서 지지 확인 후 분할 접근합니다. 손절 기준은 {price_levels['stop_loss']}, 1차 목표가는 {price_levels['target_1']}로 두고, 지표 과열이나 주요 지지선 이탈 시 비중을 줄입니다.",
+    }
+    report_card_path, report_card_error = _generate_report_card_image(report_card_data, output_dir)
+    chart_paths["report_card"] = report_card_path
+    if report_card_error:
+        chart_failures.append(report_card_error)
     failures.extend(chart_failures)
     failed_sources = "\n".join(f"- {failure}" for failure in failures) if failures else "- 없음"
 
@@ -385,6 +486,7 @@ def build_report(
 
 - 분석 차트 이미지 경로: {chart_paths["analysis_chart"]}
 - 시나리오 차트 이미지 경로: {chart_paths["forecast_chart"]}
+- 리포트 카드 이미지 경로: {chart_paths["report_card"]}
 
 ## 7. 시나리오 해석
 
@@ -436,10 +538,42 @@ def build_dependency_failure_report(
     stock_name: str | None,
     horizon: str,
     image_notes: str | None,
+    output_dir: str | None,
     error: Exception,
 ) -> str:
     stock_label = stock_name or ticker
     image_text = image_notes or "차트 이미지가 제공되지 않았거나 별도 이미지 메모가 없음"
+    report_card_path, report_card_error = _generate_report_card_image(
+        {
+            "stock_name": stock_label,
+            "ticker": ticker,
+            "data_as_of": "확인 실패",
+            "recommendation": "WATCH",
+            "confidence": "40%",
+            "current_price": "확인 실패",
+            "entry_price": "확인 실패",
+            "stop_loss": "확인 실패",
+            "target_1": "확인 실패",
+            "target_2": "확인 실패",
+            "rsi": "확인 실패",
+            "macd": "확인 실패",
+            "bollinger": "확인 실패",
+            "ma_status": "확인 실패",
+            "new_entry_strategy": "데이터 확인 전에는 신규 진입을 보류합니다.",
+            "holder_strategy": "보유자는 실제 OHLCV 확인 후 손절 기준을 재설정합니다.",
+            "risk_management": "데이터 의존성 또는 네트워크 문제가 해결되기 전에는 비중을 확대하지 않습니다.",
+            "summary": "실제 데이터 확인에 실패해 이미지 또는 사용자 제공 정보만 참고할 수 있습니다.",
+            "trend_analysis": "확인 실패",
+            "pattern_analysis": image_text,
+            "indicator_analysis": "RSI, MACD, Bollinger Band, MA 배열 모두 확인 실패",
+            "trade_strategy": "데이터 확인 전에는 신규 진입을 보류하고, 기존 보유자는 손절 기준을 재확인해야 합니다.",
+            "risk": "데이터 없음",
+            "reward": "데이터 없음",
+            "risk_reward": "데이터 없음",
+        },
+        output_dir,
+    )
+    report_card_failure_line = f"- 리포트 카드 이미지 생성 실패 이유: {report_card_error}\n" if report_card_error else ""
 
     return f"""# 종목 차트 분석 리포트
 
@@ -515,7 +649,9 @@ def build_dependency_failure_report(
 
 - 분석 차트 이미지 경로: 생성 실패
 - 시나리오 차트 이미지 경로: 생성 실패
+- 리포트 카드 이미지 경로: {report_card_path}
 - 이미지 생성 실패 이유: 데이터 분석 의존성 로딩 실패로 OHLCV 차트 렌더링 불가
+{report_card_failure_line}
 
 ## 7. 시나리오 해석
 
