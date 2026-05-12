@@ -96,6 +96,15 @@ def _build_price_levels(ohlcv: dict[str, Any], indicators: dict[str, Any]) -> di
         "stop_loss": _format_price(stop_loss),
         "target_1": _format_price(target_1),
         "target_2": _format_price(target_2),
+        "current_price_meaning": "실제 OHLCV 기준 최근 종가",
+        "entry_meaning": "20일선 또는 단기 지지 후보 확인 후 분할 진입",
+        "support_1_meaning": "20일선 또는 단기 지지 후보" if ma20 else "최근 저점 기반 지지 후보",
+        "support_2_meaning": "60일선 또는 중기 지지 후보" if ma60 else "최근 저점 기반 지지 후보",
+        "resistance_1_meaning": "최근 고점 기반 저항 후보",
+        "resistance_2_meaning": "Bollinger Band 상단 또는 최근 고점 기반 저항 후보",
+        "stop_loss_meaning": "1차 지지선 이탈 기준",
+        "target_1_meaning": "최근 고점 기반 저항 후보",
+        "target_2_meaning": "Bollinger Band 상단 또는 최근 고점 기반 저항 후보",
     }
 
 
@@ -112,6 +121,15 @@ def _format_detected_levels(levels: dict[str, Any] | None, fallback: dict[str, s
         "stop_loss": _format_price(levels.get("stop_loss")),
         "target_1": _format_price(levels.get("target_1")),
         "target_2": _format_price(levels.get("target_2")),
+        "current_price_meaning": "실제 OHLCV 기준 최근 종가",
+        "entry_meaning": str(levels.get("entry_meaning") or "지지선 확인 후 분할 진입 후보"),
+        "support_1_meaning": str(levels.get("support_1_meaning") or "지지 후보"),
+        "support_2_meaning": str(levels.get("support_2_meaning") or "지지 후보"),
+        "resistance_1_meaning": str(levels.get("resistance_1_meaning") or "저항 후보"),
+        "resistance_2_meaning": str(levels.get("resistance_2_meaning") or "저항 후보"),
+        "stop_loss_meaning": str(levels.get("stop_loss_meaning") or "1차 지지선 이탈 기준"),
+        "target_1_meaning": str(levels.get("target_1_meaning") or "1차 저항 기반 일부 익절 후보"),
+        "target_2_meaning": str(levels.get("target_2_meaning") or "2차 저항 기반 추가 상승 목표"),
     }
 
 
@@ -221,6 +239,15 @@ def build_report(
         "stop_loss": "확인 실패",
         "target_1": "확인 실패",
         "target_2": "확인 실패",
+        "current_price_meaning": "OHLCV 확인 실패",
+        "entry_meaning": "OHLCV 확인 실패",
+        "support_1_meaning": "OHLCV 확인 실패",
+        "support_2_meaning": "OHLCV 확인 실패",
+        "resistance_1_meaning": "OHLCV 확인 실패",
+        "resistance_2_meaning": "OHLCV 확인 실패",
+        "stop_loss_meaning": "OHLCV 확인 실패",
+        "target_1_meaning": "OHLCV 확인 실패",
+        "target_2_meaning": "OHLCV 확인 실패",
     }
     price_levels = _format_detected_levels(detected_levels, fallback_price_levels)
 
@@ -310,15 +337,15 @@ def build_report(
 
 | 구분 | 가격 | 의미 |
 |---|---:|---|
-| 현재가 | {price_levels["current_price"]} | 실제 OHLCV 기준 최근 종가 |
-| 진입 후보 | {price_levels["entry"]} | 추격보다 지지 확인 우선 |
-| 1차 지지선 | {price_levels["support_1"]} | 20일선 또는 단기 지지 후보 |
-| 2차 지지선 | {price_levels["support_2"]} | 60일선 또는 중기 지지 후보 |
-| 1차 저항선 | {price_levels["resistance_1"]} | 최근 60거래일 고점 |
-| 2차 저항선 | {price_levels["resistance_2"]} | 볼린저 상단 또는 확장 저항 |
-| 손절 기준 | {price_levels["stop_loss"]} | 1차 지지선 이탈 기준 |
-| 1차 목표가 | {price_levels["target_1"]} | 일부 익절 후보 |
-| 2차 목표가 | {price_levels["target_2"]} | 추가 상승 목표 |
+| 현재가 | {price_levels["current_price"]} | {price_levels["current_price_meaning"]} |
+| 진입 후보 | {price_levels["entry"]} | {price_levels["entry_meaning"]} |
+| 1차 지지선 | {price_levels["support_1"]} | {price_levels["support_1_meaning"]} |
+| 2차 지지선 | {price_levels["support_2"]} | {price_levels["support_2_meaning"]} |
+| 1차 저항선 | {price_levels["resistance_1"]} | {price_levels["resistance_1_meaning"]} |
+| 2차 저항선 | {price_levels["resistance_2"]} | {price_levels["resistance_2_meaning"]} |
+| 손절 기준 | {price_levels["stop_loss"]} | {price_levels["stop_loss_meaning"]} |
+| 1차 목표가 | {price_levels["target_1"]} | {price_levels["target_1_meaning"]} |
+| 2차 목표가 | {price_levels["target_2"]} | {price_levels["target_2_meaning"]} |
 
 ## 4. 이미지 기반 분석과 데이터 기반 분석 비교
 

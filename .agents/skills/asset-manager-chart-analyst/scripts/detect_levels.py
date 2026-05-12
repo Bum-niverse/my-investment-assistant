@@ -19,6 +19,14 @@ class PriceLevels:
     target_1: float
     target_2: float
     reason: str
+    support_1_meaning: str
+    support_2_meaning: str
+    resistance_1_meaning: str
+    resistance_2_meaning: str
+    entry_meaning: str
+    stop_loss_meaning: str
+    target_1_meaning: str
+    target_2_meaning: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +40,14 @@ class PriceLevels:
             "target_1": self.target_1,
             "target_2": self.target_2,
             "reason": self.reason,
+            "support_1_meaning": self.support_1_meaning,
+            "support_2_meaning": self.support_2_meaning,
+            "resistance_1_meaning": self.resistance_1_meaning,
+            "resistance_2_meaning": self.resistance_2_meaning,
+            "entry_meaning": self.entry_meaning,
+            "stop_loss_meaning": self.stop_loss_meaning,
+            "target_1_meaning": self.target_1_meaning,
+            "target_2_meaning": self.target_2_meaning,
         }
 
 
@@ -64,6 +80,24 @@ def _nearest_below(values: list[float], price: float, fallback: float) -> float:
 def _nearest_above(values: list[float], price: float, fallback: float) -> float:
     above = [value for value in values if value > price]
     return min(above) if above else fallback
+
+
+def _nearest_candidate_below(
+    candidates: list[tuple[float, str]],
+    price: float,
+    fallback: tuple[float, str],
+) -> tuple[float, str]:
+    below = [(value, meaning) for value, meaning in candidates if value < price]
+    return max(below, key=lambda item: item[0]) if below else fallback
+
+
+def _nearest_candidate_above(
+    candidates: list[tuple[float, str]],
+    price: float,
+    fallback: tuple[float, str],
+) -> tuple[float, str]:
+    above = [(value, meaning) for value, meaning in candidates if value > price]
+    return min(above, key=lambda item: item[0]) if above else fallback
 
 
 def _high_volume_price_levels(df: pd.DataFrame, bins: int = 12, top_n: int = 4) -> list[float]:
@@ -99,20 +133,48 @@ def detect_price_levels(df: pd.DataFrame) -> PriceLevels:
     recent_low = float(recent["Low"].tail(60).min())
     volume_levels = _high_volume_price_levels(recent)
 
-    support_candidates = pivot_lows + [level for level in volume_levels if level < current] + [ma20, ma60, ma120, box_low, recent_low]
-    resistance_candidates = pivot_highs + [level for level in volume_levels if level > current] + [box_high, recent_high]
-
-    support_1 = _nearest_below(support_candidates, current, min(ma20, box_low, recent_low))
-    support_2 = _nearest_below(
-        [value for value in support_candidates if value < support_1],
-        current,
-        min(ma60, ma120, recent_low),
+    support_candidates = (
+        [(float(value), "최근 저점 기반 지지 후보") for value in pivot_lows]
+        + [(float(level), "거래량 집중 가격대 기반 지지 후보") for level in volume_levels if level < current]
+        + [
+            (ma20, "20일선 또는 단기 지지 후보"),
+            (ma60, "60일선 또는 중기 지지 후보"),
+            (ma120, "120일선 또는 장기 지지 후보"),
+            (box_low, "박스권 하단 기반 지지 후보"),
+            (recent_low, "최근 저점 기반 지지 후보"),
+        ]
     )
-    resistance_1 = _nearest_above(resistance_candidates, current, max(box_high, recent_high))
-    resistance_2 = _nearest_above(
-        [value for value in resistance_candidates if value > resistance_1],
+    resistance_candidates = (
+        [(float(value), "최근 고점 기반 저항 후보") for value in pivot_highs]
+        + [(float(level), "거래량 집중 가격대 기반 저항 후보") for level in volume_levels if level > current]
+        + [
+            (box_high, "박스권 상단 기반 저항 후보"),
+            (recent_high, "최근 고점 기반 저항 후보"),
+        ]
+    )
+
+    fallback_support = min(
+        [(ma20, "20일선 또는 단기 지지 후보"), (box_low, "박스권 하단 기반 지지 후보"), (recent_low, "최근 저점 기반 지지 후보")],
+        key=lambda item: item[0],
+    )
+    support_1, support_1_meaning = _nearest_candidate_below(support_candidates, current, fallback_support)
+    support_2, support_2_meaning = _nearest_candidate_below(
+        [(value, meaning) for value, meaning in support_candidates if value < support_1],
         current,
-        max(recent_high, resistance_1 * 1.06),
+        min(
+            [(ma60, "60일선 또는 중기 지지 후보"), (ma120, "120일선 또는 장기 지지 후보"), (recent_low, "최근 저점 기반 지지 후보")],
+            key=lambda item: item[0],
+        ),
+    )
+    fallback_resistance = max(
+        [(box_high, "박스권 상단 기반 저항 후보"), (recent_high, "최근 고점 기반 저항 후보")],
+        key=lambda item: item[0],
+    )
+    resistance_1, resistance_1_meaning = _nearest_candidate_above(resistance_candidates, current, fallback_resistance)
+    resistance_2, resistance_2_meaning = _nearest_candidate_above(
+        [(value, meaning) for value, meaning in resistance_candidates if value > resistance_1],
+        current,
+        (max(recent_high, resistance_1 * 1.06), "최근 고점 기반 저항 후보"),
     )
 
     entry = support_1 * 1.01
@@ -135,4 +197,12 @@ def detect_price_levels(df: pd.DataFrame) -> PriceLevels:
         target_1=float(target_1),
         target_2=float(target_2),
         reason=reason,
+        support_1_meaning=support_1_meaning,
+        support_2_meaning=support_2_meaning,
+        resistance_1_meaning=resistance_1_meaning,
+        resistance_2_meaning=resistance_2_meaning,
+        entry_meaning=f"{support_1_meaning} 확인 후 분할 진입 후보",
+        stop_loss_meaning=f"{support_1_meaning} 이탈 기준",
+        target_1_meaning=resistance_1_meaning,
+        target_2_meaning=resistance_2_meaning,
     )
