@@ -7,16 +7,47 @@ import numpy as np
 import pandas as pd
 
 
-def _configure_korean_font() -> None:
+def _get_korean_font_properties() -> Any:
+    import platform
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
     from matplotlib import font_manager
 
-    available_fonts = {font.name for font in font_manager.fontManager.ttflist}
-    for font_name in ["AppleGothic", "Malgun Gothic", "NanumGothic", "DejaVu Sans"]:
-        if font_name in available_fonts:
+    system = platform.system()
+    preferred_fonts = {
+        "Darwin": ["AppleGothic"],
+        "Windows": ["Malgun Gothic"],
+        "Linux": ["NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "UnDotum"],
+    }
+    fallback_fonts = ["AppleGothic", "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "DejaVu Sans"]
+    candidates = preferred_fonts.get(system, []) + fallback_fonts
+
+    available = {font.name: font.fname for font in font_manager.fontManager.ttflist}
+    for font_name in candidates:
+        if font_name in available:
             plt.rcParams["font.family"] = font_name
-            break
+            plt.rcParams["axes.unicode_minus"] = False
+            return font_manager.FontProperties(fname=available[font_name])
+
     plt.rcParams["axes.unicode_minus"] = False
+    return font_manager.FontProperties()
+
+
+def _apply_font_to_axes(ax: Any, font_properties: Any) -> None:
+    ax.title.set_fontproperties(font_properties)
+    ax.xaxis.label.set_fontproperties(font_properties)
+    ax.yaxis.label.set_fontproperties(font_properties)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_properties)
+    legend = ax.get_legend()
+    if legend:
+        for text in legend.get_texts():
+            text.set_fontproperties(font_properties)
+        if legend.get_title():
+            legend.get_title().set_fontproperties(font_properties)
 
 
 def _prepare_close_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -59,7 +90,7 @@ def render_forecast_chart(
 ) -> str:
     import matplotlib.pyplot as plt
 
-    _configure_korean_font()
+    font_properties = _get_korean_font_properties()
     chart_df = _prepare_close_data(df)
     current_price = float(chart_df["Close"].iloc[-1])
     scenarios = build_scenarios(current_price, levels)
@@ -81,23 +112,30 @@ def render_forecast_chart(
         if value is None:
             continue
         ax.axhline(float(value), color=color, linestyle=":", linewidth=1.1, alpha=0.85)
-        ax.text(future_index[-1], float(value), f" {label} {float(value):,.0f}", color=color, va="center", fontsize=9)
+        ax.text(future_index[-1], float(value), f" {label} {float(value):,.0f}", color=color, va="center", fontsize=9, fontproperties=font_properties)
 
     ax.axvline(chart_df.index[-1], color="#94a3b8", linestyle=":", linewidth=1.2)
-    ax.text(chart_df.index[-1], current_price, " 현재", color="#111827", fontsize=9, va="bottom")
+    ax.text(chart_df.index[-1], current_price, " 현재", color="#111827", fontsize=9, va="bottom", fontproperties=font_properties)
 
-    ax.set_title(title)
-    ax.set_ylabel("가격")
+    ax.set_title(title, fontproperties=font_properties, fontsize=15, fontweight="bold", pad=14)
+    ax.set_xlabel("날짜", fontproperties=font_properties)
+    ax.set_ylabel("가격", fontproperties=font_properties)
     ax.grid(True, color="#e5e7eb")
-    ax.legend(loc="best")
+    legend = ax.legend(loc="best", prop=font_properties)
+    if legend.get_title():
+        legend.get_title().set_fontproperties(font_properties)
     ax.text(
         0.01,
         0.02,
         "미래 구간은 예측이 아니라 조건부 시나리오입니다. 점선은 실제 가격이 아닙니다.",
         transform=ax.transAxes,
         fontsize=10,
+        fontproperties=font_properties,
         bbox={"boxstyle": "round,pad=0.45", "facecolor": "#f8fafc", "edgecolor": "#94a3b8", "alpha": 0.92},
     )
+    _apply_font_to_axes(ax, font_properties)
+    for text in fig.texts:
+        text.set_fontproperties(font_properties)
 
     output = Path(output_path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,49 @@ from typing import Any
 import pandas as pd
 
 
+def _get_korean_font_properties() -> Any:
+    import platform
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+
+    system = platform.system()
+    preferred_fonts = {
+        "Darwin": ["AppleGothic"],
+        "Windows": ["Malgun Gothic"],
+        "Linux": ["NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "UnDotum"],
+    }
+    fallback_fonts = ["AppleGothic", "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR", "Noto Sans KR", "DejaVu Sans"]
+    candidates = preferred_fonts.get(system, []) + fallback_fonts
+
+    available = {font.name: font.fname for font in font_manager.fontManager.ttflist}
+    for font_name in candidates:
+        if font_name in available:
+            plt.rcParams["font.family"] = font_name
+            plt.rcParams["axes.unicode_minus"] = False
+            return font_manager.FontProperties(fname=available[font_name])
+
+    plt.rcParams["axes.unicode_minus"] = False
+    return font_manager.FontProperties()
+
+
+def _apply_font_to_axes(ax: Any, font_properties: Any) -> None:
+    ax.title.set_fontproperties(font_properties)
+    ax.xaxis.label.set_fontproperties(font_properties)
+    ax.yaxis.label.set_fontproperties(font_properties)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontproperties(font_properties)
+    legend = ax.get_legend()
+    if legend:
+        for text in legend.get_texts():
+            text.set_fontproperties(font_properties)
+        if legend.get_title():
+            legend.get_title().set_fontproperties(font_properties)
+
+
 def _prepare_chart_data(df: pd.DataFrame) -> pd.DataFrame:
     required = ["Open", "High", "Low", "Close", "Volume"]
     missing = [column for column in required if column not in df.columns]
@@ -17,18 +60,6 @@ def _prepare_chart_data(df: pd.DataFrame) -> pd.DataFrame:
     if not isinstance(chart_df.index, pd.DatetimeIndex):
         chart_df.index = pd.to_datetime(chart_df.index)
     return chart_df.tail(180)
-
-
-def _configure_korean_font() -> None:
-    import matplotlib.pyplot as plt
-    from matplotlib import font_manager
-
-    available_fonts = {font.name for font in font_manager.fontManager.ttflist}
-    for font_name in ["AppleGothic", "Malgun Gothic", "NanumGothic", "DejaVu Sans"]:
-        if font_name in available_fonts:
-            plt.rcParams["font.family"] = font_name
-            break
-    plt.rcParams["axes.unicode_minus"] = False
 
 
 def render_annotated_chart(
@@ -43,7 +74,7 @@ def render_annotated_chart(
     except Exception as exc:
         raise RuntimeError(f"mplfinance import 실패: {exc}") from exc
 
-    _configure_korean_font()
+    font_properties = _get_korean_font_properties()
     chart_df = _prepare_chart_data(df)
 
     for window in (5, 20, 60, 120):
@@ -70,7 +101,6 @@ def render_annotated_chart(
         volume=True,
         addplot=add_plots,
         style=style,
-        title=title,
         figsize=(14, 9),
         returnfig=True,
         panel_ratios=(4, 1),
@@ -78,6 +108,10 @@ def render_annotated_chart(
     )
 
     ax_price = axes[0]
+    ax_volume = axes[2] if len(axes) > 2 else axes[-1]
+    ax_price.set_title(title, fontproperties=font_properties, fontsize=15, fontweight="bold", pad=14)
+    ax_price.set_ylabel("가격", fontproperties=font_properties)
+    ax_volume.set_ylabel("거래량", fontproperties=font_properties)
     line_specs = [
         ("support_1", "1차 지지", "#16a34a"),
         ("support_2", "2차 지지", "#15803d"),
@@ -104,6 +138,7 @@ def render_annotated_chart(
             color=color,
             fontsize=9,
             va="center",
+            fontproperties=font_properties,
         )
 
     ax_price.text(
@@ -114,8 +149,14 @@ def render_annotated_chart(
         va="top",
         ha="left",
         fontsize=10,
+        fontproperties=font_properties,
         bbox={"boxstyle": "round,pad=0.5", "facecolor": "#f8fafc", "edgecolor": "#94a3b8", "alpha": 0.92},
     )
+
+    for axis in axes:
+        _apply_font_to_axes(axis, font_properties)
+    for text in fig.texts:
+        text.set_fontproperties(font_properties)
 
     output = Path(output_path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
