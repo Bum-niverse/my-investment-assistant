@@ -14,6 +14,7 @@ env/
 
 # Generated outputs
 outputs/
+.matplotlib-cache/
 
 # Jupyter
 .ipynb_checkpoints/
