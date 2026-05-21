@@ -288,6 +288,43 @@ Detect visible patterns:
 - long lower wick
 - consolidation box
 
+For every stock chart analysis, include a repeated chart-behavior section. This is mandatory for all tickers, not only for Hanwha or Korean stocks. Identify:
+
+- whether Bollinger Band upper touches tend to lead to continuation or pullback
+- whether upper-band intraday breaks fail to close above the band
+- whether long upper wicks after high volume usually lead to next-day or multi-day weakness
+- whether the stock behaves better with breakout chasing or pullback confirmation
+- the key price that invalidates the observed pattern
+
+When enough OHLCV history is available, summarize recent repeated events in a small table:
+
+- event date
+- close
+- intraday high
+- Bollinger upper band
+- next 1-day, 3-day, and 5-day return when available
+- interpretation
+
+If enough OHLCV history is not available, explicitly write "반복 패턴 분석: 확인 실패" and explain the missing data.
+
+### 5-1. Next-Session Candle Probability
+
+For every short-term or swing trading report, include a next-session candle probability section by default. If the user asks whether the next or later trading session is likely to be bullish or bearish, make this section more detailed. Provide a probability estimate for:
+
+- bullish candle
+- bearish candle
+- doji/flat candle
+
+Rules:
+
+- Treat the probabilities as subjective scenario probabilities, not guarantees.
+- State the exact assumption, such as "assuming today's close is 138,000 KRW."
+- For weekends or holidays, use the next actual trading session rather than the calendar next day.
+- Explain that candle color can differ from day-over-day return when the stock gaps up or down.
+- Anchor the probability in support/resistance, Bollinger Band behavior, moving-average position, volume, and recent repeated chart behavior.
+- Clearly state which price level must be recovered or broken to confirm the next-session view.
+- If next-session analysis is not meaningful because data is stale, market is closed for a long holiday, or OHLCV is unavailable, explicitly write "다음 거래일 캔들 확률: 확인 실패" and explain why.
+
 ### 6. Recommendation Logic
 
 Use these labels:
