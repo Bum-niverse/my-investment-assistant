@@ -41,6 +41,15 @@ def _format_signed_percent(value: float | None) -> str:
     return f"{value:+.2f}%"
 
 
+def _format_probability(value: Any) -> str:
+    if value is None:
+        return "샘플 부족"
+    try:
+        return f"{float(value):.2f}%"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _calculate_card_metrics(current_price: str, entry_price: str, stop_loss: str, target_1: str) -> dict[str, str]:
     entry = _parse_price(entry_price)
     stop = _parse_price(stop_loss)
@@ -265,6 +274,7 @@ def build_report(
         from fetch_fundamentals import fetch_fundamentals
         from fetch_market_data import fetch_ohlcv, summarize_ohlcv
         from fetch_news import fetch_news
+        from sequence_probability import calculate_sequence_probability
         from technical_indicators import build_indicator_summary
     except Exception as exc:
         return build_dependency_failure_report(ticker, stock_name, horizon, image_notes, output_dir, exc)
@@ -283,6 +293,15 @@ def build_report(
             failures.append(indicator_error)
     else:
         failures.append("기술지표 계산 생략: OHLCV 데이터 없음")
+
+    sequence_probability: dict[str, Any] = {}
+    if market_result.ok:
+        try:
+            sequence_probability = calculate_sequence_probability(market_result.data).to_dict()
+        except Exception as exc:
+            failures.append(f"자동 연속성/Bollinger 확률 계산 실패: {exc}")
+    else:
+        failures.append("자동 연속성/Bollinger 확률 계산 생략: OHLCV 데이터 없음")
 
     fundamentals = fetch_fundamentals(ticker)
     failures.extend(fundamentals.failures)
@@ -331,6 +350,26 @@ def build_report(
     band_judgment = _judge_bollinger(latest_close, bands)
     moving_averages = indicators.get("moving_averages", {})
     ma_alignment = _judge_ma_alignment(moving_averages) if isinstance(moving_averages, dict) else "확인 실패"
+    sequence_summary = sequence_probability.get("summary", "확인 실패")
+    sequence_dashboard = (
+        f"- 현재 감지된 패턴 크기: Current Sequence "
+        f"{sequence_probability.get('current_sequence_count', '확인 실패')}일 연속 "
+        f"{sequence_probability.get('current_sequence_direction', '확인 실패')}\n"
+        f"- 과거 동일 패턴 출현 횟수: {sequence_probability.get('historical_sample_size', '확인 실패')}\n"
+        f"- 동일 패턴 다음 봉 통계: 양봉 {_format_probability(sequence_probability.get('sequence_bullish_probability'))} / "
+        f"음봉 {_format_probability(sequence_probability.get('sequence_bearish_probability'))}\n"
+        f"- 현재 BB 위치: {sequence_probability.get('bb_position', '확인 실패')}\n"
+        f"- 이 차트의 BB 상단 성향: 돌파형 {_format_probability(sequence_probability.get('bb_upper_breakout_probability'))} / "
+        f"반전형 {_format_probability(sequence_probability.get('bb_upper_reversal_probability'))} "
+        f"(샘플 {sequence_probability.get('bb_upper_sample_size', '확인 실패')}회)\n"
+        f"- BB 하단 성향: 반등형 {_format_probability(sequence_probability.get('bb_lower_bounce_probability'))} / "
+        f"이탈형 {_format_probability(sequence_probability.get('bb_lower_breakdown_probability'))} "
+        f"(샘플 {sequence_probability.get('bb_lower_sample_size', '확인 실패')}회)\n"
+        f"- ★ 자동 분석 결과 - 다음 봉 예측: 양봉 "
+        f"{_format_probability(sequence_probability.get('next_bullish_probability'))} / 음봉 "
+        f"{_format_probability(sequence_probability.get('next_bearish_probability'))} "
+        f"({sequence_probability.get('prediction', '확인 실패')})"
+    )
 
     data_based_judgment = "데이터 부족"
     if market_result.ok:
@@ -472,6 +511,11 @@ def build_report(
 
 ### Bollinger Band
 {band_judgment}
+
+### 자동 연속성/Bollinger 다음 봉 확률
+{sequence_dashboard}
+
+해석: {sequence_summary}
 
 ### 거래량
 최근 거래량: {_format_price(ohlcv_summary.get("latest_volume")) if market_result.ok else "확인 실패"}
@@ -636,6 +680,9 @@ def build_dependency_failure_report(
 ### Bollinger Band
 확인 실패
 
+### 자동 연속성/Bollinger 다음 봉 확률
+확인 실패
+
 ### 거래량
 확인 실패
 
@@ -724,6 +771,11 @@ def main() -> None:
     parser.add_argument("--image-notes", default=None, help="Optional image-based chart notes")
     parser.add_argument("--output", default=None, help="Optional output markdown path")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated PNG chart images")
+    parser.add_argument(
+        "--send-kakao-self",
+        action="store_true",
+        help="Send the generated markdown report to KakaoTalk 'me' with kakaocli",
+    )
     args = parser.parse_args()
 
     report = build_report(
@@ -735,9 +787,17 @@ def main() -> None:
     )
 
     if args.output:
-        Path(args.output).write_text(report, encoding="utf-8")
+        output_path = Path(args.output)
+        output_path.write_text(report, encoding="utf-8")
+        if args.send_kakao_self:
+            from send_kakao_report import send_report_to_kakao_me
+
+            for result in send_report_to_kakao_me(output_path):
+                print(result)
     else:
         print(report)
+        if args.send_kakao_self:
+            raise SystemExit("--send-kakao-self 옵션은 --output으로 저장할 analysis.md 경로를 함께 지정해야 합니다.")
 
 
 if __name__ == "__main__":

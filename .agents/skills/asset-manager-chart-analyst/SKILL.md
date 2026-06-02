@@ -67,17 +67,28 @@ Use bundled scripts when useful:
 - `scripts/detect_levels.py`: support, resistance, entry, stop-loss, and target detection.
 - `scripts/render_annotated_chart.py`: PNG candlestick chart with moving averages, volume, support/resistance, and trade labels.
 - `scripts/render_forecast_chart.py`: PNG scenario chart named around "향후 주가 시나리오 전망" with dotted future paths.
+- `scripts/sequence_probability.py`: Auto-sequence and Bollinger Band behavior probability scan based on OHLCV data.
+- `scripts/send_kakao_report.py`: Send a generated `analysis.md` report to KakaoTalk "me" through local `kakaocli`.
 - `scripts/full_stock_analysis.py`: combined Korean report skeleton with source, timestamp, and failure reporting.
+- `assets/auto_sequence_bb_probability.pine`: TradingView Pine Script v5 implementation of the auto-sequence and BB behavior dashboard.
 
 Required checks:
 1. Fetch OHLCV data.
 2. Calculate RSI, MACD, Bollinger Bands, moving averages, and recent volatility.
-3. Fetch or summarize fundamentals such as revenue, operating income, net income, debt ratio, PER, PBR, ROE when available.
-4. Fetch recent earnings or disclosure-related information when available.
-5. Fetch recent news headlines when available.
-6. Compare image-based analysis with data-based analysis.
-7. Clearly state data source and data timestamp.
-8. If any data source fails, explicitly say which source failed and continue with available data only.
+3. Calculate automatic sequence probability:
+   - Current consecutive bullish/bearish candle count.
+   - Historical sample size for the same sequence.
+   - Next-candle bullish/bearish outcome ratio after the same sequence.
+4. Calculate Bollinger Band behavior probability:
+   - Upper-band breakout vs reversal tendency.
+   - Lower-band bounce vs breakdown tendency.
+   - Combined next-candle bullish/bearish probability using sequence and BB evidence.
+5. Fetch or summarize fundamentals such as revenue, operating income, net income, debt ratio, PER, PBR, ROE when available.
+6. Fetch recent earnings or disclosure-related information when available.
+7. Fetch recent news headlines when available.
+8. Compare image-based analysis with data-based analysis.
+9. Clearly state data source and data timestamp.
+10. If any data source fails, explicitly say which source failed and continue with available data only.
 
 Output sections must include:
 
@@ -131,6 +142,94 @@ The final report must include:
 - 하락 시나리오:
 - 무효화 조건:
 
+## KakaoTalk Delivery
+
+When the user asks to summarize or send the generated report to KakaoTalk, do not paste the full report by default. Create a compact, trade-decision-focused Korean KakaoTalk summary first.
+
+Required KakaoTalk summary goals:
+
+- Keep it short enough to read comfortably in KakaoTalk.
+- Keep only actionable trading judgment, not long data-collection details.
+- For each stock, include 핵심 타점, 지지선/저항선, 봉 모양, 차트 특징, 현재 판단, 대응 전략.
+- Exclude unnecessary calculation process, failed data source details, long explanations, and file paths.
+- Use a 대응 관점 tone. Do not sound like a guaranteed investment recommendation.
+- Preserve the source report's prices, RSI, MACD, support, resistance, targets, and invalidation/stop levels exactly. Do not invent or alter numbers.
+- If data is intraday, clearly mark `장중 기준`.
+- If foreign/institution flow is not confirmed yet, do not state it as confirmed.
+- End with one short investment-risk sentence.
+
+KakaoTalk summary format:
+
+```text
+[오늘 보유 종목 요약]
+작성 기준: YYYY-MM-DD / 장중 또는 종가 기준
+
+1. 포트폴리오 전체 판단
+- 현금 여력:
+- 가장 중요한 대응:
+- 오늘 우선순위:
+  1) 종목명: 핵심 행동
+  2) 종목명: 핵심 행동
+  3) 종목명: 핵심 행동
+
+2. 종목별 요약
+
+① 종목명
+- 현재 판단:
+- 현재가:
+- 차트 상태:
+- 봉/캔들 특징:
+- 기술적 특징:
+  - RSI:
+  - MACD:
+  - 볼린저밴드 위치:
+  - 이동평균선 위치:
+- 핵심 가격대:
+  - 진입/추매 후보:
+  - 1차 지지:
+  - 강한 지지:
+  - 1차 저항:
+  - 목표가:
+  - 손절/전략 재검토 기준:
+- 대응 전략:
+- 한 줄 결론:
+
+② 종목명
+동일 형식
+
+③ 종목명
+동일 형식
+
+3. 오늘 가장 중요한 가격
+- 종목명: 가격 / 의미
+- 종목명: 가격 / 의미
+- 종목명: 가격 / 의미
+
+4. 최종 한 줄 요약
+- 전체적으로 당장 전량 매도인지, 보유인지, 일부 익절 대기인지 명확히 정리
+```
+
+KakaoTalk sending rules:
+
+1. Generate or locate the markdown report, normally `analysis.md`.
+2. Generate the KakaoTalk summary in the format above.
+3. Before any actual KakaoTalk send, ask for explicit confirmation of the recipient/chat room and the exact message unless the user has already provided both in the same turn.
+4. Use local `kakaocli send --me` only when the user explicitly asks to send to self. Do not send to other chat rooms unless the user explicitly names the recipient/chat room.
+5. If `kakaocli` is missing or KakaoTalk permissions are not configured, state the failure reason clearly.
+6. Keep KakaoTalk messages compact because long markdown bodies with many line breaks can be unstable in UI automation.
+
+Example:
+
+```bash
+python .agents/skills/asset-manager-chart-analyst/scripts/send_kakao_report.py analysis.md
+```
+
+Or generate and send in one command:
+
+```bash
+python .agents/skills/asset-manager-chart-analyst/scripts/full_stock_analysis.py --ticker 000880.KS --name 한화 --horizon 스윙 --output analysis.md --send-kakao-self
+```
+
 ## Required Final Report Structure
 
 Always keep this structure for the final Korean report:
@@ -180,6 +279,7 @@ Always keep this structure for the final Korean report:
 ### RSI
 ### MACD
 ### Bollinger Band
+### 자동 연속성/Bollinger 다음 봉 확률
 ### 거래량
 ### 캔들/패턴
 ### 지지와 저항

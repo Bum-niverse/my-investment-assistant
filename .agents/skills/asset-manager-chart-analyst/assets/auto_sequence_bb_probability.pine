@@ -1,0 +1,191 @@
+//@version=5
+indicator("Auto Sequence + BB Behavior Probability Scanner", overlay=true, max_bars_back=5000)
+
+scanBars = input.int(1500, "Backtest Scan Bars", minval=200, maxval=4500)
+maxSeqCap = input.int(20, "Max Auto Sequence Cap", minval=3, maxval=50)
+bbLen = input.int(20, "Bollinger Band Length", minval=5, maxval=100)
+bbMult = input.float(2.0, "Bollinger Band Multiplier", minval=0.5, maxval=5.0)
+bbLookahead = input.int(3, "BB Behavior Lookahead Bars", minval=1, maxval=10)
+showBB = input.bool(true, "Show Bollinger Bands")
+
+basis = ta.sma(close, bbLen)
+dev = bbMult * ta.stdev(close, bbLen)
+upper = basis + dev
+lower = basis - dev
+
+plot(showBB ? basis : na, "BB Basis", color=color.new(color.gray, 30))
+plot(showBB ? upper : na, "BB Upper", color=color.new(color.orange, 0))
+plot(showBB ? lower : na, "BB Lower", color=color.new(color.orange, 0))
+
+f_candle_dir(int offset) =>
+    close[offset] > open[offset] ? 1 : close[offset] < open[offset] ? -1 : 0
+
+f_pct(float numerator, float denominator) =>
+    denominator > 0 ? numerator / denominator * 100.0 : na
+
+f_fmt_pct(float value) =>
+    na(value) ? "샘플 부족" : str.tostring(value, "#.##") + "%"
+
+f_dir_text(int dir) =>
+    dir == 1 ? "양봉" : dir == -1 ? "음봉" : "도지/중립"
+
+f_prediction_text(float bullProb, float bearProb) =>
+    na(bullProb) or na(bearProb) ? "샘플 부족" : bullProb > bearProb ? "양봉 우위" : bearProb > bullProb ? "음봉 우위" : "중립"
+
+var table dash = table.new(position.top_right, 2, 8, border_width=1)
+
+if barstate.islast
+    int curDir = f_candle_dir(0)
+    int curSeq = 0
+
+    if curDir != 0
+        for i = 0 to maxSeqCap - 1
+            if f_candle_dir(i) == curDir
+                curSeq += 1
+            else
+                break
+
+    int seqBullCount = 0
+    int seqBearCount = 0
+    int seqSample = 0
+    int safeScanLimit = math.min(scanBars, bar_index - maxSeqCap - bbLookahead - 5)
+
+    if curSeq > 0 and safeScanLimit > curSeq + 5
+        for off = 1 to safeScanLimit
+            bool sameSeq = true
+
+            for j = 0 to curSeq - 1
+                if f_candle_dir(off + j) != curDir
+                    sameSeq := false
+
+            bool exactStart = f_candle_dir(off + curSeq) != curDir
+            int nextDir = f_candle_dir(off - 1)
+
+            if sameSeq and exactStart
+                if nextDir == 1
+                    seqBullCount += 1
+                    seqSample += 1
+                else if nextDir == -1
+                    seqBearCount += 1
+                    seqSample += 1
+
+    float seqBullProb = f_pct(seqBullCount, seqSample)
+    float seqBearProb = f_pct(seqBearCount, seqSample)
+
+    int upperBreakout = 0
+    int upperReverse = 0
+    int upperSample = 0
+    int lowerBounce = 0
+    int lowerBreak = 0
+    int lowerSample = 0
+
+    if safeScanLimit > bbLen + bbLookahead + 5
+        for off = bbLookahead to safeScanLimit
+            bool upperTouch = high[off] >= upper[off] or close[off] >= upper[off]
+            bool lowerTouch = low[off] <= lower[off] or close[off] <= lower[off]
+
+            if upperTouch and not na(upper[off]) and not na(basis[off])
+                int outcome = 0
+
+                for k = 1 to bbLookahead
+                    if outcome == 0
+                        bool breakoutCondition = close[off - k] > upper[off - k] or high[off - k] > high[off]
+                        bool reversalCondition = close[off - k] < basis[off - k] or close[off - k] < close[off]
+
+                        if breakoutCondition
+                            outcome := 1
+                        else if reversalCondition
+                            outcome := -1
+
+                if outcome == 1
+                    upperBreakout += 1
+                    upperSample += 1
+                else if outcome == -1
+                    upperReverse += 1
+                    upperSample += 1
+
+            if lowerTouch and not na(lower[off]) and not na(basis[off])
+                int outcome = 0
+
+                for k = 1 to bbLookahead
+                    if outcome == 0
+                        bool bounceCondition = close[off - k] > basis[off - k] or close[off - k] > close[off]
+                        bool breakdownCondition = close[off - k] < lower[off - k] or low[off - k] < low[off]
+
+                        if bounceCondition
+                            outcome := 1
+                        else if breakdownCondition
+                            outcome := -1
+
+                if outcome == 1
+                    lowerBounce += 1
+                    lowerSample += 1
+                else if outcome == -1
+                    lowerBreak += 1
+                    lowerSample += 1
+
+    float upperBreakoutPct = f_pct(upperBreakout, upperSample)
+    float upperReversePct = f_pct(upperReverse, upperSample)
+    float lowerBouncePct = f_pct(lowerBounce, lowerSample)
+    float lowerBreakPct = f_pct(lowerBreak, lowerSample)
+
+    bool curUpperTouch = high >= upper or close >= upper
+    bool curLowerTouch = low <= lower or close <= lower
+
+    float bbBullProb = na
+    float bbBearProb = na
+    int bbSampleForNow = 0
+
+    if curUpperTouch and upperSample > 0
+        bbBullProb := upperBreakoutPct
+        bbBearProb := upperReversePct
+        bbSampleForNow := upperSample
+    else if curLowerTouch and lowerSample > 0
+        bbBullProb := lowerBouncePct
+        bbBearProb := lowerBreakPct
+        bbSampleForNow := lowerSample
+    else
+        bbBullProb := 50.0
+        bbBearProb := 50.0
+
+    float seqWeight = seqSample > 0 ? math.min(seqSample / 30.0, 1.0) : 0.0
+    float bbWeight = bbSampleForNow > 0 ? math.min(bbSampleForNow / 50.0, 1.0) : 0.0
+    float finalBull = na
+    float finalBear = na
+
+    if seqWeight + bbWeight > 0
+        float seqBullSafe = na(seqBullProb) ? 50.0 : seqBullProb
+        float bbBullSafe = na(bbBullProb) ? 50.0 : bbBullProb
+
+        finalBull := ((seqBullSafe * seqWeight) + (bbBullSafe * bbWeight)) / (seqWeight + bbWeight)
+        finalBear := 100.0 - finalBull
+
+    string bbPositionText = curUpperTouch ? "현재 BB 상단권" : curLowerTouch ? "현재 BB 하단권" : "현재 BB 중립권"
+    string bbTypeText = upperSample > 0 ? "돌파형 " + f_fmt_pct(upperBreakoutPct) + " vs 반전형 " + f_fmt_pct(upperReversePct) : "BB 상단 샘플 부족"
+    string resultText = "양봉 " + f_fmt_pct(finalBull) + " / 음봉 " + f_fmt_pct(finalBear)
+    string signalText = f_prediction_text(finalBull, finalBear)
+
+    color headerBg = color.rgb(20, 30, 45)
+    color rowBg = color.rgb(245, 247, 250)
+    color textCol = color.rgb(20, 25, 35)
+    color bullCol = color.rgb(18, 130, 70)
+    color bearCol = color.rgb(180, 45, 45)
+
+    table.cell(dash, 0, 0, "Auto Quant Dashboard", text_color=color.white, bgcolor=headerBg)
+    table.cell(dash, 1, 0, "No Repaint", text_color=color.white, bgcolor=headerBg)
+    table.cell(dash, 0, 1, "현재 감지된 패턴", text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 1, 1, "Current Sequence: " + str.tostring(curSeq) + "일 연속 " + f_dir_text(curDir), text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 0, 2, "과거 동일 패턴 출현", text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 1, 2, "Historical Sample Size: " + str.tostring(seqSample), text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 0, 3, "동일 패턴 다음 봉", text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 1, 3, "양봉 " + f_fmt_pct(seqBullProb) + " / 음봉 " + f_fmt_pct(seqBearProb), text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 0, 4, "BB 현재 위치", text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 1, 4, bbPositionText, text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 0, 5, "BB 상단 성향", text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 1, 5, bbTypeText, text_color=textCol, bgcolor=rowBg)
+    table.cell(dash, 0, 6, "★ 다음 봉 예측", text_color=color.white, bgcolor=finalBull >= finalBear ? bullCol : bearCol)
+    table.cell(dash, 1, 6, resultText, text_color=color.white, bgcolor=finalBull >= finalBear ? bullCol : bearCol)
+    table.cell(dash, 0, 7, "자동 분석 결과", text_color=color.white, bgcolor=headerBg)
+    table.cell(dash, 1, 7, signalText, text_color=color.white, bgcolor=headerBg)
+
+plotshape(barstate.islast, title="Current Analysis Point", style=shape.circle, location=location.abovebar, size=size.tiny, color=color.new(color.yellow, 0))

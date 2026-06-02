@@ -38,6 +38,7 @@ class ChartReport:
     rsi_analysis: str = "확인 실패"
     macd_analysis: str = "확인 실패"
     bollinger_analysis: str = "확인 실패"
+    sequence_probability_analysis: str = "확인 실패"
     volume_analysis: str = "확인 실패"
     pattern_analysis: str = "확인 실패"
     level_analysis: str = "확인 실패"
@@ -121,6 +122,9 @@ def render_report(report: ChartReport) -> str:
 
 ### Bollinger Band
 {report.bollinger_analysis}
+
+### 자동 연속성/Bollinger 다음 봉 확률
+{report.sequence_probability_analysis}
 
 ### 거래량
 {report.volume_analysis}

@@ -58,6 +58,9 @@
 ### Bollinger Band
 {{ bollinger_analysis }}
 
+### 자동 연속성/Bollinger 다음 봉 확률
+{{ sequence_probability_analysis }}
+
 ### 거래량
 {{ volume_analysis }}
 
