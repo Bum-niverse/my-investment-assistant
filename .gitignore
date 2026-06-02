@@ -15,6 +15,11 @@ env/
 # Generated outputs
 outputs/
 .matplotlib-cache/
+analysis.md
+analysis/
+analysis_kakao.txt
+kakao_chunks/
+kakao_chunks_it/
 
 # Jupyter
 .ipynb_checkpoints/

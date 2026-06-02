@@ -475,3 +475,34 @@ If the user provides portfolio data, include:
 ### 8. Output Format
 
 Use the `Required Final Report Structure` above. Always include data verification, image-vs-data comparison, generated chart paths, scenario interpretation, limitations, and disclaimer.
+
+### 9. Per-Stock Report Storage
+
+Do not overwrite the workspace root `analysis.md` for ordinary stock reports. Save each report in a stock-specific folder by default:
+
+- Korean stocks: `analysis/{stock_name}_{ticker}/analysis.md`
+- US stocks: `analysis/{stock_name}_{ticker}/analysis.md`
+- Chart images: same folder or a stock-specific `outputs/{date}_{stock_name}_{ticker}/` folder
+
+If the user asks to analyze multiple stocks, create one separate `analysis.md` per stock and optionally create an index/summary file. Preserve previously generated stock reports unless the user explicitly asks to overwrite them.
+
+### 10. Multi-Stock Default Requirements
+
+When the user lists multiple stocks, automatically analyze and save each stock separately even if the user does not explicitly ask for separate files.
+
+For every stock report, include these sections by default:
+
+- data-based OHLCV and indicator analysis
+- RSI, MACD, Bollinger Band, MA5/20/60/120
+- volume and foreign/institution flow when available
+- support/resistance, entry zone, stop/review level, target levels
+- pullback assessment
+- candle/body/wick analysis
+- chart-shape characteristics such as breakout, failed breakout, box range, trend-line touch, lower-band bounce, upper-band riding, or gap behavior
+- next-session bullish/bearish probability with sample-size caveat
+- good-news and bad-news catalysts
+- public community/market-reaction summary, clearly labeled as qualitative and biased
+- generated analysis chart and scenario chart paths
+- limitations and investment-risk disclaimer
+
+Do not omit candle shape, chart shape, news, or community/market reaction unless the data source is unavailable; in that case, write `확인 실패` or `데이터 없음` with the reason.
