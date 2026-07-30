@@ -1,4 +1,4 @@
-# Personal Investment Assistant
+# FinPilot
 
 A Python-based research toolkit for producing evidence-aware stock and portfolio analysis reports.
 
